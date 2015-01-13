@@ -54,6 +54,16 @@ struct jrpc_server {
 	int debug_level;
 };
 
+struct jrpcs_client {
+    char *ip;
+    int port_number;
+    struct ev_loop *loop;
+    ev_io listen_watcher;
+    int debug_level;
+};
+
+typedef void (rpc_reply_callback_t)(int call_id, cJSON *reply);
+
 struct jrpc_connection {
 	struct ev_io io;
 	int fd;
@@ -62,6 +72,13 @@ struct jrpc_connection {
 	char * buffer;
 	int debug_level;
 };
+
+/*  JRCP CLIENT APIs */
+int jrpc_client_init(struct jrpc_client *client, char *ip, int port_number);
+int jrpc_client_destroy(struct jrpc_client *client);
+void jrpc_client_run(struct jrpc_client *client);
+int jrpc_client_stop(struct jrpc_client *client);
+int jrpc_client_async_call(struct jrpc_client *client, char *method_name, rpc_reply_callback_t *reply_cb, ...);
 
 int jrpc_server_init(struct jrpc_server *server, int port_number);
 
