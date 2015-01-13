@@ -7,7 +7,7 @@
 # Because a.out is only a sample program we don't want it to be installed.
 # The 'noinst_' prefix indicates that the following targets are not to be
 # installed.
-noinst_PROGRAMS=server
+noinst_PROGRAMS=server client
 
 #######################################
 # Build information for each executable. The variable name is derived
@@ -28,3 +28,15 @@ endif
 # Compiler options for a.out
 server_CPPFLAGS = $(LIBEV_CFLAGS) -I$(top_srcdir)/include
 
+# Sources for the client example
+client_SOURCES= client.c
+
+# Linker options for client
+client_LDFLAGS = $(LIBEV_LIBS) $(top_srcdir)/src/libjsonrpcc.la
+if MINGW32
+client_LDFLAGS += -lws2_32 -pthread
+endif
+
+
+# Compiler options for client
+client_CPPFLAGS = $(LIBEV_CFLAGS) -I$(top_srcdir)/include

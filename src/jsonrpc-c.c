@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
+#include <stdarg.h>
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -28,6 +29,7 @@
 #define close(socket) closesocket(socket)
 #endif
 
+static int _call_id = 0;
 struct ev_loop *loop;
 
 #ifdef _WIN32
@@ -74,6 +76,11 @@ const char* inet_ntop(int af, const void* src, char* dst, int cnt) {
 #endif
 
 #endif
+
+int get_unique_id() {
+    // TODO: increment the call id in a way that is thread safe
+    return _call_id++;
+}
 
 // get sockaddr, IPv4 or IPv6:
 static void *get_in_addr(struct sockaddr *sa) {
@@ -474,4 +481,179 @@ int jrpc_deregister_procedure(struct jrpc_server *server, char *name) {
 		return -1;
 	}
 	return 0;
+}
+
+// CLIENT related code
+int jrpc_client_init(struct jrpc_client *client) {
+    return -1;
+}
+
+int jrpc_client_connect(struct jrpc_client *client, char *ip, int port) {
+    struct sockaddr_in serv_addr;
+    struct hostent *server;
+#ifdef _WIN32
+    WSADATA wsaData;
+    if (WSAStartup(WINSOCK_VERSION, &wsaData)) {
+        printf("winsock could not be initiated\n");
+        WSACleanup();
+        return -1;
+    }
+#endif
+
+    client->connection_watcher.fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (client->connection_watcher.fd < 0) {
+        if (client->debug_level) {
+            printf("error connecting to server: Cannot create socket");
+        }
+        goto close_fd_error;
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+    serv_addr.sin_addr.s_addr = inet_addr(ip);
+
+    if (connect(client->connection_watcher.fd, (const struct sockaddr *)(&(serv_addr)), sizeof(serv_addr)) < 0) {
+        if (client->debug_level) {
+            printf("socket connect failed");
+        }
+        goto close_fd_error;
+    }
+    return 0;
+
+    close_fd_error:
+    close(client->connection_watcher.fd);
+
+    if (client->debug_level) {
+        printf("Cannot connect to %s:%d", ip, port);
+    }
+#ifdef _WIN32
+    WSACleanup();
+#endif
+    return -1;
+}
+
+int jrpc_client_disconnect(struct jrpc_client *client) {
+    close(client->connection_watcher.fd);
+#ifdef _WIN32
+    WSACleanup();
+#endif
+    return 0;
+}
+
+static cJSON* receive_reply(struct jrpc_client *client) {
+	struct jrpc_connection *conn =
+	        (struct jrpc_connection *) &client->connection_watcher;
+	size_t bytes_read = 0;
+	int fd = conn->fd;
+	// TODO: improve the way of waiting for a valid jSON reply
+	while (1) {
+	    if (conn->pos == (conn->buffer_size - 1)) {
+	        char * new_buffer = realloc(conn->buffer, conn->buffer_size *= 2);
+	        if (new_buffer == NULL) {
+	            perror("Memory error");
+	            jrpc_client_disconnect(client);
+	            return NULL;
+	        }
+	        conn->buffer = new_buffer;
+	        memset(conn->buffer + conn->pos, 0, conn->buffer_size - conn->pos);
+	    }
+	    // can not fill the entire buffer, string must be NULL terminated
+	    int max_read_size = conn->buffer_size - conn->pos - 1;
+	    if ((bytes_read = recv(fd, conn->buffer + conn->pos, max_read_size, 0))
+	            == -1) {
+	        perror("read");
+	        jrpc_client_disconnect(client);
+	        return NULL;
+	    }
+	    if (!bytes_read) {
+	        // client closed the sending half of the connection
+	        if (client->debug_level)
+	            printf("Client closed connection.\n");
+	        jrpc_client_disconnect(client);
+	        return NULL;
+	    } else {
+	        cJSON *root;
+	        char *end_ptr = NULL;
+	        conn->pos += bytes_read;
+	        if ((root = cJSON_Parse_Stream(conn->buffer, &end_ptr)) != NULL) {
+	            if (client->debug_level > 1) {
+	                char * str_result = cJSON_Print(root);
+	                printf("Valid JSON Received:\n%s\n", str_result);
+	                free(str_result);
+	            }
+	            return root;
+	        } else {
+	            if (end_ptr != (conn->buffer + conn->pos)) {
+	                if (client->debug_level) {
+	                    printf("INVALID JSON Received:\n---\n%s\n---\n",
+	                            conn->buffer);
+	                }
+	                continue;
+	            }
+	        }
+	    }
+	}
+	return NULL;
+}
+
+cJSON* jrpc_client_call(struct jrpc_client *client, char *method_name, int no_args, ...) {
+    // reinit the buffers used to get the response
+    client->connection_watcher.buffer_size = 1500;
+    client->connection_watcher.buffer = malloc(1500);
+    memset(client->connection_watcher.buffer, 0, 1500);
+    client->connection_watcher.pos = 0;
+
+    va_list argp;
+    if (client == NULL || method_name == NULL) return NULL;
+
+    cJSON *params = cJSON_CreateArray();
+    va_start(argp, no_args);
+    for (int i = 0; i < no_args; i++) {
+        char *argv = va_arg(argp, char *);
+        cJSON_AddItemToArray(params, cJSON_CreateString((const char*)argv));
+    }
+    va_end(argp);
+
+    cJSON *json_call = cJSON_CreateObject();
+    cJSON_AddItemToObject(json_call, "method", cJSON_CreateString(method_name));
+    cJSON_AddItemToObject(json_call, "params", params);
+
+    char call_id[10];
+    sprintf(call_id, "%d", get_unique_id());
+    cJSON_AddItemToObject(json_call, "id", cJSON_CreateString(call_id));
+
+    char *call_str = cJSON_Print(json_call);
+    if (client->debug_level) {
+        printf("calling remote with JSON: %s", call_str);
+    }
+
+    int to_send = strlen(call_str);
+    int sent = 0;
+    while (sent < to_send) {
+        sent = send(client->connection_watcher.fd, (void *) call_str, to_send, 0);
+        if (sent == -1) goto call_error;
+        to_send -= sent;
+    }
+    send(client->connection_watcher.fd, (void *) "\n", 1, 0);
+    free(call_str);
+
+    cJSON_Delete(json_call);
+    // TODO: make it robust and threading safe, using the ev.c
+    cJSON *reply= receive_reply(client);
+    free(client->connection_watcher.buffer);
+    return reply;
+
+    call_error:
+    printf("Error when trying to call the server");
+    return NULL;
+}
+
+int jrpc_client_async_call(struct jrpc_client *client, char *method_name, rpc_reply_callback_t *reply_cb, ...) {
+
+    return -1;
+}
+
+int jrpc_client_destroy(struct jrpc_client *client) {
+
+    return 0;
 }
