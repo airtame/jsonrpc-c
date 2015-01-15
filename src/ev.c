@@ -15,28 +15,25 @@ typedef struct list {
 } list_t;
 
 #define LIST(l) ((list_t*)(l))
-#define LIST_INSERT(list, eviodata) { \
-    do { \
-        list_t *el = LIST(list)->next == NULL ? LIST(list) : (list_t *)malloc(sizeof(list_t)); \
-        el->io = eviodata; \
-        el->next = LIST(list); \
-        list = el; \
-    } while (0);\
-}
+#define LIST_NEW_EL(new_el, el_data) ((new_el) = malloc(sizeof(list_t)), (new_el)->io = (el_data), new_el)
+#define LIST_ITERATE(list) (list_t *el = LIST(list); el != NULL; el = el->next)
+#define LIST_ITERATOR() (el)
 
 static list_t first_el = {
         .next = NULL,
         .io = NULL
 };
 
-struct ev_loop EV_DEFAULT_S = {
+static struct ev_loop EV_DEFAULT_S = {
         .running = 0,
-        .ev_ios = (void *) &first_el
+        .ev_ios = NULL,
+        .no_fds = 0
 };
 
+
+// PUBLIC API functions or declarations
 struct ev_loop *EV_DEFAULT = &EV_DEFAULT_S;
 
-// PUBLIC API functions
 int ev_io_init(ev_io *io, io_callbacks io_cb, int fd, int flag) {
     ev_vb("Init ev_io with fd = %d", fd);
     if (fd > FD_SETSIZE || fd < 1) {
@@ -45,26 +42,44 @@ int ev_io_init(ev_io *io, io_callbacks io_cb, int fd, int flag) {
     }
     io->cb = io_cb;
     io->fd = fd;
+    io->flags = flag;
     return EV_OK;
 }
 
 void ev_io_start(struct ev_loop *loop, ev_io *io) {
     ev_vb("Starting ev_io with fd = %d", io->fd);
-    LIST_INSERT(loop->ev_ios, io);
+    //LIST_INSERT(loop->ev_ios, io);
+    // first element
+    if (loop->no_fds == 0) {
+        list_t *first_el = LIST_NEW_EL(first_el, io);
+        first_el->next = NULL;
+        loop->ev_ios = (void*) first_el;
+        loop->no_fds = 1;
+    } else {
+        list_t *new_el = LIST_NEW_EL(new_el, io);
+        new_el->next = LIST(loop->ev_ios);
+        loop->ev_ios = (void *) new_el;
+    }
+
+    pthread_mutex_lock(&loop->mutex);
+    if (io->flags | EV_READ)  FD_SET(io->fd, &loop->readfds);
+    if (io->flags | EV_WRITE) FD_SET(io->fd, &loop->writefds);
+    pthread_mutex_unlock(&loop->mutex);
+
+    ev_vb("Currently having %d io events in the loop: ", loop->no_fds);
+    for (list_t *el = ((list_t*)(loop->ev_ios)); el != NULL; el = el->next) {
+        ev_vb("element: %d", el->io->fd);
+    }
 }
 
 void ev_io_stop(struct ev_loop *loop, ev_io *io) {
     ev_vb("Stopping ev_io with fd = %d", io->fd);
-    //loop->ev_ios[io->fd] = NULL;
 }
 
 void ev_run(struct ev_loop *loop, int flags) {
     ev_vb("Starting the loop");
-    fd_set active_fd_set, read_fd_set;
-    int i;
 
     pthread_mutex_init(&loop->mutex, NULL);
-    FD_ZERO (&active_fd_set);
     loop->running = 1;
 
     while (1) {
@@ -76,6 +91,17 @@ void ev_run(struct ev_loop *loop, int flags) {
             break;
         }
 
+        // wait for one or more socket being ready
+        if (select(FD_SETSIZE, &loop->readfds, &loop->writefds, NULL) < 0) {
+            ev_error("Error when doing select on our sockets");
+        }
+
+        // loop over our sockets
+        for (list_t *el = ((list_t*)(loop->ev_ios)); el != NULL; el = el->next) {
+            if (FD_ISSET(el->io->fd, &loop->readfds) && el->io->flags | EV_READ) {
+                el->io->cb(loop, el->io, 0);
+            }
+        }
     }
 }
 

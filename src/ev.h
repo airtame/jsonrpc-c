@@ -52,6 +52,9 @@ struct ev_loop {
     int running;
     pthread_mutex_t mutex;
     void *ev_ios;
+    int no_fds;
+    fd_set readfds;
+    fd_set writefds;
 };
 
 int ev_io_init(ev_io *io, io_callbacks io_cb, int fd, int flag);
