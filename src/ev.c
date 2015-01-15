@@ -69,17 +69,41 @@ void ev_io_start(struct ev_loop *loop, ev_io *io) {
     pthread_mutex_unlock(&loop->mutex);
 
     ev_vb("Currently having %d io events in the loop: ", loop->no_fds);
-    for (list_t *el = ((list_t*)(loop->ev_ios)); el != NULL; el = el->next) {
+    for (list_t *el = LIST(loop->ev_ios); el != NULL; el = el->next) {
         ev_vb("element: %d", el->io->fd);
     }
 }
 
 void ev_io_stop(struct ev_loop *loop, ev_io *io) {
     ev_vb("Stopping ev_io with fd = %d", io->fd);
-    pthread_mutex_lock(&loop->mutex);
-    if (io->flags | EV_READ)  FD_CLR(io->fd, &loop->readfds);
-    if (io->flags | EV_WRITE) FD_CLR(io->fd, &loop->writefds);
-    pthread_mutex_unlock(&loop->mutex);
+    for (list_t *el = LIST(loop->ev_ios); el->next != NULL; el = el->next) {
+        // found it in the middle
+        if (el->next != NULL && el->next->io == io) {
+            ev_vb("Found element after first pos. Removing it...");
+            list_t *ol  = el->next;
+            el->next = el->next->next;
+            free(ol);
+            loop->no_fds--;
+            break;
+        } else if (el->io == io) { // found it on the first pos
+            ev_vb("Found element on the first pos. Removing it...");
+            list_t *ol = LIST(loop->ev_ios);
+            loop->ev_ios = (void *) el->next;
+            free(ol);
+            loop->no_fds--;
+            break;
+        }
+    }
+
+    ev_vb("Currently having %d io events in the loop: ", loop->no_fds);
+    for (list_t *el = LIST(loop->ev_ios); el != NULL; el = el->next) {
+        ev_vb("element: %d", el->io->fd);
+    }
+
+//    pthread_mutex_lock(&loop->mutex);
+//    if (io->flags | EV_READ)  FD_CLR(io->fd, &loop->readfds);
+//    if (io->flags | EV_WRITE) FD_CLR(io->fd, &loop->writefds);
+//    pthread_mutex_unlock(&loop->mutex);
 }
 
 void ev_run(struct ev_loop *loop, int flags) {
@@ -98,7 +122,7 @@ void ev_run(struct ev_loop *loop, int flags) {
         }
 
         // wait for one or more socket being ready
-        int rc= select(FD_SETSIZE, &loop->readfds, &loop->writefds, NULL, NULL);
+        int rc= select(FD_SETSIZE, &loop->readfds, NULL, NULL, NULL);
         if (rc == 0) continue;
         if (rc < 0) {
             ev_error("Error when doing select on our sockets");
@@ -114,6 +138,14 @@ void ev_run(struct ev_loop *loop, int flags) {
                 ev_vb("Calling the callback for fd %d ", el->io->fd);
                 el->io->cb(loop, el->io, 0);
             }
+        }
+
+        FD_ZERO(&loop->readfds);
+        FD_ZERO(&loop->writefds);
+
+        for (list_t *el = ((list_t*)(loop->ev_ios)); el != NULL; el = el->next) {
+            if (el->io->flags | EV_READ)  FD_SET(el->io->fd, &loop->readfds);
+            if (el->io->flags | EV_WRITE)  FD_SET(el->io->fd, &loop->writefds);
         }
     }
 }
