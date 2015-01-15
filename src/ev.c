@@ -8,6 +8,7 @@
 
 #include "ev.h"
 #include <stdlib.h>
+#include <sys/select.h>
 
 typedef struct list {
     struct list *next;
@@ -59,6 +60,7 @@ void ev_io_start(struct ev_loop *loop, ev_io *io) {
         list_t *new_el = LIST_NEW_EL(new_el, io);
         new_el->next = LIST(loop->ev_ios);
         loop->ev_ios = (void *) new_el;
+        loop->no_fds++;
     }
 
     pthread_mutex_lock(&loop->mutex);
@@ -74,6 +76,10 @@ void ev_io_start(struct ev_loop *loop, ev_io *io) {
 
 void ev_io_stop(struct ev_loop *loop, ev_io *io) {
     ev_vb("Stopping ev_io with fd = %d", io->fd);
+    pthread_mutex_lock(&loop->mutex);
+    if (io->flags | EV_READ)  FD_CLR(io->fd, &loop->readfds);
+    if (io->flags | EV_WRITE) FD_CLR(io->fd, &loop->writefds);
+    pthread_mutex_unlock(&loop->mutex);
 }
 
 void ev_run(struct ev_loop *loop, int flags) {
@@ -92,13 +98,20 @@ void ev_run(struct ev_loop *loop, int flags) {
         }
 
         // wait for one or more socket being ready
-        if (select(FD_SETSIZE, &loop->readfds, &loop->writefds, NULL) < 0) {
+        int rc= select(FD_SETSIZE, &loop->readfds, &loop->writefds, NULL, NULL);
+        if (rc == 0) continue;
+        if (rc < 0) {
             ev_error("Error when doing select on our sockets");
+            perror("select");
+            return;
         }
+
+        ev_vb("Got event on %d sockets out of %d monitoring", rc, loop->no_fds);
 
         // loop over our sockets
         for (list_t *el = ((list_t*)(loop->ev_ios)); el != NULL; el = el->next) {
             if (FD_ISSET(el->io->fd, &loop->readfds) && el->io->flags | EV_READ) {
+                ev_vb("Calling the callback for fd %d ", el->io->fd);
                 el->io->cb(loop, el->io, 0);
             }
         }
