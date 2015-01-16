@@ -19,7 +19,11 @@ noinst_PROGRAMS=server
 server_SOURCES= server.c
 
 # Linker options for a.out
-server_LDFLAGS = $(LIBEV_LIBS) $(top_srcdir)/src/libjsonrpcc.la
+server_LDFLAGS = $(LIBEV_LIBS) $(top_srcdir)/src/libjsonrpcc.la 
+if MINGW32
+server_LDFLAGS += -lws2_32 -pthread
+endif
+
 
 # Compiler options for a.out
 server_CPPFLAGS = $(LIBEV_CFLAGS) -I$(top_srcdir)/include

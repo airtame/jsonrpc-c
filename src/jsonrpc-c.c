@@ -83,8 +83,8 @@ static int send_response(struct jrpc_connection * conn, char *response) {
 	int fd = conn->fd;
 	if (conn->debug_level > 1)
 		printf("JSON Response:\n%s\n", response);
-	write(fd, response, strlen(response));
-	write(fd, "\n", 1);
+	send(fd, response, strlen(response), 0);
+	send(fd, "\n", 1, 0);
 	return 0;
 }
 
@@ -202,8 +202,9 @@ static void connection_cb(struct ev_loop *loop, ev_io *w, int revents) {
 	}
 	// can not fill the entire buffer, string must be NULL terminated
 	int max_read_size = conn->buffer_size - conn->pos - 1;
-	if ((bytes_read = read(fd, conn->buffer + conn->pos, max_read_size))
+	if ((bytes_read = recv(fd, conn->buffer + conn->pos, max_read_size, 0))
 			== -1) {
+        printf("\nelis: fd = %d", fd); fflush(stdout);
 		perror("read");
 		return close_connection(loop, w);
 	}
@@ -263,6 +264,9 @@ static void accept_cb(struct ev_loop *loop, ev_io *w, int revents) {
 	sin_size = sizeof their_addr;
 	connection_watcher->fd = accept(w->fd, (struct sockaddr *) &their_addr,
 			&sin_size);
+
+    printf("\n elis: accepted connecton with fd %d !!!!!!!!", fd); fflush(stdout);
+
 	if (connection_watcher->fd == -1) {
 		perror("accept");
 		free(connection_watcher);

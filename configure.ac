@@ -10,6 +10,8 @@ AM_PROG_CC_C_O
 AC_SUBST([LIBEV_CFLAGS])
 AC_SUBST([LIBEV_LIBS])
 
+AM_CONDITIONAL([MINGW32], [test "x$host_os" = xmingw32])
+
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([
  Makefile
