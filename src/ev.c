@@ -8,7 +8,11 @@
 
 #include "ev.h"
 #include <stdlib.h>
+#ifndef _WIN32
 #include <sys/select.h>
+#else
+#include <winsock2.h>
+#endif
 
 // PRIVATE DECLARATIONS
 enum {

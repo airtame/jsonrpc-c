@@ -11,14 +11,65 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#else
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#endif
 
 #include "jsonrpc-c.h"
 
 struct ev_loop *loop;
+
+#ifdef _WIN32
+/* Hack to get inet_ntop to work on Windows */
+#ifndef inet_ntop
+#ifndef EAFNOSUPPORT
+#define EAFNOSUPPORT            WSAEAFNOSUPPORT
+#endif
+#include <string.h>
+
+const char* inet_ntop(int af, const void* src, char* dst, int cnt) {
+#ifdef InetNtop
+    InetNtop(af, src, dst, cnt);
+#else
+    static const char fmt[] = "%u.%u.%u.%u";
+    char tmp[sizeof "255.255.255.255"];
+    unsigned char *charsrc = (unsigned char *)src;
+
+    if (af == AF_INET) {
+        if (cnt < strlen("255.255.255.255")) {
+            return (NULL);
+        }
+        sprintf(tmp, fmt, charsrc[0], charsrc[1], charsrc[2], charsrc[3]);
+        strcpy(dst, tmp);
+        return (dst);
+    } else {
+        errno = EAFNOSUPPORT;
+        return (NULL);
+    }
+#if 0
+    struct sockaddr_in srcaddr;
+    memset(&srcaddr, 0, sizeof(struct sockaddr_in));
+    memcpy(&(srcaddr.sin_addr), src, sizeof(srcaddr.sin_addr));
+    srcaddr.sin_family = af;
+    if (WSAAddressToString((struct sockaddr*)&srcaddr, sizeof(struct sockaddr_in), 0, dst, (LPDWORD)&cnt) != 0) {
+        DWORD rv = WSAGetLastError();
+        printf("WSAAdressToString(): %d\n", rv);
+        return NULL;
+    }
+    return dst;
+#endif
+#endif
+}
+#endif
+
+#endif
 
 // get sockaddr, IPv4 or IPv6:
 static void *get_in_addr(struct sockaddr *sa) {
@@ -270,6 +321,15 @@ static int __jrpc_server_start(struct jrpc_server *server) {
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE; // use my IP
 
+#ifdef _WIN32
+    WSADATA wsaData;
+    if (WSAStartup(WINSOCK_VERSION, &wsaData)) {
+        printf("winsock could not be initiated\n");
+        WSACleanup();
+        return 0;
+    }
+#endif
+
 	if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
 		return 1;
@@ -342,6 +402,9 @@ void jrpc_server_destroy(struct jrpc_server *server){
 		jrpc_procedure_destroy( &(server->procedures[i]) );
 	}
 	free(server->procedures);
+#ifdef _WIN32
+    WSACleanup();
+#endif
 }
 
 static void jrpc_procedure_destroy(struct jrpc_procedure *procedure){
