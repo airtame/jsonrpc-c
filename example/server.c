@@ -18,7 +18,10 @@
 struct jrpc_server my_server;
 
 cJSON * say_hello(jrpc_context * ctx, cJSON * params, cJSON *id) {
-	return cJSON_CreateString("Hello!");
+    static int no_call = 0;
+    char msg[30];
+    sprintf(msg, "Hello - %d", no_call++);
+	return cJSON_CreateString(msg);
 }
 
 cJSON * exit_server(jrpc_context * ctx, cJSON * params, cJSON *id) {
