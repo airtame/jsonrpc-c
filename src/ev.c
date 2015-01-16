@@ -78,6 +78,7 @@ void ev_io_stop(struct ev_loop *loop, ev_io *io) {
 
 void ev_run(struct ev_loop *loop, int flags) {
     ev_vb("Starting the loop");
+    ev_io** cbs;
 
     pthread_mutex_init(&loop->mutex, NULL);
     loop->running = 1;
@@ -103,12 +104,21 @@ void ev_run(struct ev_loop *loop, int flags) {
         ev_vb("Got event on %d sockets out of %d monitoring", rc, loop->no_fds);
 
         // loop over our sockets
+        cbs = (ev_io**) malloc(rc*sizeof(ev_io *));
+        int no = 0;
         for (list_t *el = ((list_t*)(loop->ev_ios)); el != NULL; el = el->next) {
             if (FD_ISSET(el->io->fd, &loop->readfds) && el->io->flags | EV_READ) {
-                ev_vb("Calling the callback for fd %d ", el->io->fd);
-                el->io->cb(loop, el->io, 0);
+                cbs[no]=el->io;
+                no++;
             }
         }
+
+        for (int i = 0; i < no; i++) {
+            ev_vb("Calling the callback for fd %d ", cbs[i]->fd);
+            cbs[i]->cb(loop, cbs[i], 0);
+        }
+
+        free(cbs);
 
         FD_ZERO(&loop->readfds);
         FD_ZERO(&loop->writefds);
