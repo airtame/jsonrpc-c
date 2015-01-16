@@ -51,10 +51,6 @@ struct ev_loop *EV_DEFAULT = &EV_DEFAULT_S;
 
 int ev_io_init(ev_io *io, io_callbacks io_cb, int fd, int flag) {
     ev_vb("Init ev_io with fd = %d", fd);
-    if (fd > FD_SETSIZE || fd < 1) {
-        ev_error("elis not giving in invalid file descriptor");
-        //return EV_ERROR;
-    }
     io->cb = io_cb;
     io->fd = fd;
     io->flags = flag;
