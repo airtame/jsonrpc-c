@@ -58,11 +58,9 @@ int ev_io_init(ev_io *io, io_callbacks io_cb, int fd, int flag) {
 }
 void ev_io_start(struct ev_loop *loop, ev_io *io) {
     ev_vb("Starting ev_io with fd = %d", io->fd);
-    loop_add_io(loop, io);
 
     pthread_mutex_lock(&loop->mutex);
-    if (io->flags | EV_READ)  FD_SET(io->fd, &loop->readfds);
-    if (io->flags | EV_WRITE) FD_SET(io->fd, &loop->writefds);
+    loop_add_io(loop, io);
     pthread_mutex_unlock(&loop->mutex);
 
     ev_vb("Currently having %d io events in the loop: ", loop->no_fds);
@@ -71,7 +69,9 @@ void ev_io_start(struct ev_loop *loop, ev_io *io) {
 
 void ev_io_stop(struct ev_loop *loop, ev_io *io) {
     ev_vb("Stopping ev_io with fd = %d", io->fd);
+    pthread_mutex_lock(&loop->mutex);
     loop_remove_io(loop, io);
+    pthread_mutex_unlock(&loop->mutex);
     ev_vb("Currently having %d io events in the loop: ", loop->no_fds);
     loop_display_ios(loop);
 }
@@ -92,6 +92,16 @@ void ev_run(struct ev_loop *loop, int flags) {
             break;
         }
 
+        FD_ZERO(&loop->readfds);
+        FD_ZERO(&loop->writefds);
+
+        pthread_mutex_lock(&loop->mutex);
+        for (list_t *el = ((list_t*)(loop->ev_ios)); el != NULL; el = el->next) {
+            if (el->io->flags | EV_READ)  FD_SET(el->io->fd, &loop->readfds);
+            if (el->io->flags | EV_WRITE)  FD_SET(el->io->fd, &loop->writefds);
+        }
+        pthread_mutex_unlock(&loop->mutex);
+
         // wait for one or more socket being ready
         int rc= select(FD_SETSIZE, &loop->readfds, NULL, NULL, NULL);
         if (rc == 0) continue;
@@ -106,27 +116,20 @@ void ev_run(struct ev_loop *loop, int flags) {
         // loop over our sockets
         cbs = (ev_io**) malloc(rc*sizeof(ev_io *));
         int no = 0;
+        pthread_mutex_lock(&loop->mutex);
         for (list_t *el = ((list_t*)(loop->ev_ios)); el != NULL; el = el->next) {
             if (FD_ISSET(el->io->fd, &loop->readfds) && el->io->flags | EV_READ) {
                 cbs[no]=el->io;
                 no++;
             }
         }
+        pthread_mutex_unlock(&loop->mutex);
 
         for (int i = 0; i < no; i++) {
             ev_vb("Calling the callback for fd %d ", cbs[i]->fd);
             cbs[i]->cb(loop, cbs[i], 0);
         }
-
         free(cbs);
-
-        FD_ZERO(&loop->readfds);
-        FD_ZERO(&loop->writefds);
-
-        for (list_t *el = ((list_t*)(loop->ev_ios)); el != NULL; el = el->next) {
-            if (el->io->flags | EV_READ)  FD_SET(el->io->fd, &loop->readfds);
-            if (el->io->flags | EV_WRITE)  FD_SET(el->io->fd, &loop->writefds);
-        }
     }
 }
 
