@@ -17,9 +17,9 @@
 #include <stdio.h>
 #include <pthread.h>
 
-#define ev_error(...)    fprintf(stderr, "\n"__VA_ARGS__)
-#define ev_info(...)     fprintf(stdout, "\n"__VA_ARGS__)
-#define ev_vb(...)       fprintf(stdout, "\n"__VA_ARGS__)
+#define ev_error(...)    fprintf(stderr, "\n"__VA_ARGS__); fflush(stderr)
+#define ev_info(...)     fprintf(stdout, "\n"__VA_ARGS__); fflush(stdout)
+#define ev_vb(...)       fprintf(stdout, "\n"__VA_ARGS__); fflush(stdout)
 
 enum {
     EV_OK = 0,
@@ -46,6 +46,7 @@ typedef struct ev_io {
     void *data;
     int fd;
     io_callbacks cb;
+    int pending_op;
 } ev_io;
 
 struct ev_loop {

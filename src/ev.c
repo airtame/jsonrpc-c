@@ -10,6 +10,12 @@
 #include <stdlib.h>
 #include <sys/select.h>
 
+// PRIVATE DECLARATIONS
+enum {
+    IO_PENDING_ADD,
+    IO_PENDING_REMOVE
+};
+
 typedef struct list {
     struct list *next;
     ev_io *io;
@@ -31,6 +37,10 @@ static struct ev_loop EV_DEFAULT_S = {
         .no_fds = 0
 };
 
+void loop_add_io(struct ev_loop *loop, ev_io *io);
+void loop_remove_io(struct ev_loop *loop, ev_io *io);
+void loop_display_ios(struct ev_loop *loop);
+
 
 // PUBLIC API functions or declarations
 struct ev_loop *EV_DEFAULT = &EV_DEFAULT_S;
@@ -46,22 +56,9 @@ int ev_io_init(ev_io *io, io_callbacks io_cb, int fd, int flag) {
     io->flags = flag;
     return EV_OK;
 }
-
 void ev_io_start(struct ev_loop *loop, ev_io *io) {
     ev_vb("Starting ev_io with fd = %d", io->fd);
-    //LIST_INSERT(loop->ev_ios, io);
-    // first element
-    if (loop->no_fds == 0) {
-        list_t *first_el = LIST_NEW_EL(first_el, io);
-        first_el->next = NULL;
-        loop->ev_ios = (void*) first_el;
-        loop->no_fds = 1;
-    } else {
-        list_t *new_el = LIST_NEW_EL(new_el, io);
-        new_el->next = LIST(loop->ev_ios);
-        loop->ev_ios = (void *) new_el;
-        loop->no_fds++;
-    }
+    loop_add_io(loop, io);
 
     pthread_mutex_lock(&loop->mutex);
     if (io->flags | EV_READ)  FD_SET(io->fd, &loop->readfds);
@@ -69,41 +66,14 @@ void ev_io_start(struct ev_loop *loop, ev_io *io) {
     pthread_mutex_unlock(&loop->mutex);
 
     ev_vb("Currently having %d io events in the loop: ", loop->no_fds);
-    for (list_t *el = LIST(loop->ev_ios); el != NULL; el = el->next) {
-        ev_vb("element: %d", el->io->fd);
-    }
+    loop_display_ios(loop);
 }
 
 void ev_io_stop(struct ev_loop *loop, ev_io *io) {
     ev_vb("Stopping ev_io with fd = %d", io->fd);
-    for (list_t *el = LIST(loop->ev_ios); el->next != NULL; el = el->next) {
-        // found it in the middle
-        if (el->next != NULL && el->next->io == io) {
-            ev_vb("Found element after first pos. Removing it...");
-            list_t *ol  = el->next;
-            el->next = el->next->next;
-            free(ol);
-            loop->no_fds--;
-            break;
-        } else if (el->io == io) { // found it on the first pos
-            ev_vb("Found element on the first pos. Removing it...");
-            list_t *ol = LIST(loop->ev_ios);
-            loop->ev_ios = (void *) el->next;
-            free(ol);
-            loop->no_fds--;
-            break;
-        }
-    }
-
+    loop_remove_io(loop, io);
     ev_vb("Currently having %d io events in the loop: ", loop->no_fds);
-    for (list_t *el = LIST(loop->ev_ios); el != NULL; el = el->next) {
-        ev_vb("element: %d", el->io->fd);
-    }
-
-//    pthread_mutex_lock(&loop->mutex);
-//    if (io->flags | EV_READ)  FD_CLR(io->fd, &loop->readfds);
-//    if (io->flags | EV_WRITE) FD_CLR(io->fd, &loop->writefds);
-//    pthread_mutex_unlock(&loop->mutex);
+    loop_display_ios(loop);
 }
 
 void ev_run(struct ev_loop *loop, int flags) {
@@ -155,4 +125,47 @@ void ev_break(struct ev_loop *loop, int how) {
     pthread_mutex_lock(&loop->mutex);
     loop->running = 0;
     pthread_mutex_unlock(&loop->mutex);
+}
+
+// PRIVATE FUNCTIONS
+void loop_add_io(struct ev_loop *loop, ev_io *io) {
+    // first element
+    if (loop->no_fds == 0) {
+        list_t *first_el = LIST_NEW_EL(first_el, io);
+        first_el->next = NULL;
+        loop->ev_ios = (void*) first_el;
+        loop->no_fds = 1;
+    } else {
+        list_t *new_el = LIST_NEW_EL(new_el, io);
+        new_el->next = LIST(loop->ev_ios);
+        loop->ev_ios = (void *) new_el;
+        loop->no_fds++;
+    }
+}
+
+void loop_display_ios(struct ev_loop *loop) {
+    for (list_t *el = LIST(loop->ev_ios); el != NULL; el = el->next) {
+        ev_info("element: %d", el->io->fd);
+    }
+}
+
+void loop_remove_io(struct ev_loop *loop, ev_io *io) {
+    for (list_t *el = LIST(loop->ev_ios); el->next != NULL; el = el->next) {
+        // found it in the middle
+        if (el->next != NULL && el->next->io == io) {
+            ev_vb("Found element after first pos. Removing it...");
+            list_t *ol  = el->next;
+            el->next = el->next->next;
+            free(ol);
+            loop->no_fds--;
+            break;
+        } else if (el->io == io) { // found it on the first pos
+            ev_vb("Found element on the first pos. Removing it...");
+            list_t *ol = LIST(loop->ev_ios);
+            loop->ev_ios = (void *) el->next;
+            free(ol);
+            loop->no_fds--;
+            break;
+        }
+    }
 }
