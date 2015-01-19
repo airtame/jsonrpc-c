@@ -15,7 +15,7 @@ libjsonrpcc_la_LDFLAGS =
 
 # Compiler options. Here we are adding the include directory
 # to be searched for headers included in the source code.
-libjsonrpcc_la_CPPFLAGS = $(LIBEV_CFLAGS) -I$(top_srcdir)/include
+libjsonrpcc_la_CPPFLAGS = $(LIBEV_CFLAGS) -I$(top_srcdir)/include -std=c99
 
 # libev
 libjsonrpcc_la_LIBADD = $(LIBEV_LIBS)
