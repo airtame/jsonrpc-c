@@ -17,6 +17,14 @@
 
 struct jrpc_server my_server;
 
+cJSON * addTwoInts(jrpc_context *ctx, cJSON *params, cJSON *id) {
+    cJSON* val1 = cJSON_GetArrayItem(params, 0);
+    cJSON* val2 = cJSON_GetArrayItem(params, 1);
+    printf("\n got params: %s ", cJSON_Print(params));
+    int res = atoi(val1->valuestring) + atoi(val2->valuestring);
+    return cJSON_CreateNumber(res);
+}
+
 cJSON * say_hello(jrpc_context * ctx, cJSON * params, cJSON *id) {
 	return cJSON_CreateString("Hello!");
 }
@@ -29,6 +37,7 @@ cJSON * exit_server(jrpc_context * ctx, cJSON * params, cJSON *id) {
 int main(void) {
 	jrpc_server_init(&my_server, PORT);
 	jrpc_register_procedure(&my_server, say_hello, "sayHello", NULL );
+	jrpc_register_procedure(&my_server, addTwoInts, "addTwoInts", NULL );
 	jrpc_register_procedure(&my_server, exit_server, "exit", NULL );
 	jrpc_server_run(&my_server);
 	jrpc_server_destroy(&my_server);
