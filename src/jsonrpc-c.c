@@ -485,6 +485,10 @@ int jrpc_deregister_procedure(struct jrpc_server *server, char *name) {
 
 // CLIENT related code
 int jrpc_client_init(struct jrpc_client *client) {
+    client->connection_watcher.buffer_size = 1500;
+    client->connection_watcher.buffer = malloc(1500);
+    memset(client->connection_watcher.buffer, 0, 1500);
+    client->connection_watcher.pos = 0;
     return -1;
 }
 
@@ -545,9 +549,66 @@ int jrpc_client_disconnect(struct jrpc_client *client) {
     return 0;
 }
 
+static cJSON* receive_reply(struct jrpc_client *client) {
+	struct jrpc_connection *conn =
+	        (struct jrpc_connection *) &client->connection_watcher;
+	size_t bytes_read = 0;
+	int fd = conn->fd;
+	if (conn->pos == (conn->buffer_size - 1)) {
+		char * new_buffer = realloc(conn->buffer, conn->buffer_size *= 2);
+		if (new_buffer == NULL) {
+			perror("Memory error");
+			jrpc_client_disconnect(client);
+			return NULL;
+		}
+		conn->buffer = new_buffer;
+		memset(conn->buffer + conn->pos, 0, conn->buffer_size - conn->pos);
+	}
+	// can not fill the entire buffer, string must be NULL terminated
+	int max_read_size = conn->buffer_size - conn->pos - 1;
+	if ((bytes_read = recv(fd, conn->buffer + conn->pos, max_read_size, 0))
+			== -1) {
+		perror("read");
+		jrpc_client_disconnect(client);
+		return NULL;
+	}
+	if (!bytes_read) {
+		// client closed the sending half of the connection
+		if (client->debug_level)
+			printf("Client closed connection.\n");
+			jrpc_client_disconnect(client);
+			return NULL;
+	} else {
+	    cJSON *root;
+	    char *end_ptr = NULL;
+	    conn->pos += bytes_read;
+
+	    if ((root = cJSON_Parse_Stream(conn->buffer, &end_ptr)) != NULL) {
+	        if (client->debug_level > 1) {
+	            char * str_result = cJSON_Print(root);
+	            printf("Valid JSON Received:\n%s\n", str_result);
+	            free(str_result);
+	        }
+
+	        return root;
+	    } else {
+	        // did we parse the all buffer? If so, just wait for more.
+	        // else there was an error before the buffer's end
+	        if (end_ptr != (conn->buffer + conn->pos)) {
+	            if (client->debug_level) {
+	                printf("INVALID JSON Received:\n---\n%s\n---\n",
+	                        conn->buffer);
+	            }
+	            jrpc_client_disconnect(client);
+	            return NULL;
+	        }
+	    }
+	}
+	return NULL;
+}
+
 cJSON* jrpc_client_call(struct jrpc_client *client, char *method_name, int no_args, ...) {
     //    --> { "method": "addTwoInts", "params": ["1", "2"], "id": 1}
-
     va_list argp;
     if (client == NULL || method_name == NULL) return NULL;
 
@@ -571,9 +632,22 @@ cJSON* jrpc_client_call(struct jrpc_client *client, char *method_name, int no_ar
     if (client->debug_level) {
         printf("calling remote with JSON: %s", call_str);
     }
-        printf("\n\ncalling remote with JSON: %s\n\n", call_str);
-    free(call_str);
 
+    int to_send = strlen(call_str);
+    int sent = 0;
+    while (sent < to_send) {
+        sent = send(client->connection_watcher.fd, (void *) call_str, to_send, 0);
+        if (sent == -1) goto call_error;
+        to_send -= sent;
+    }
+    free(call_str);
+    send(client->connection_watcher.fd, (void *) "\n", 1, 0);
+
+    // TODO: make it robust and threading safe, using the ev.c
+    return receive_reply(client);
+
+    call_error:
+    printf("Error when trying to call the server");
     return NULL;
 }
 
