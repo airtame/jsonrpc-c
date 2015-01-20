@@ -20,7 +20,6 @@ struct jrpc_server my_server;
 cJSON * addTwoInts(jrpc_context *ctx, cJSON *params, cJSON *id) {
     cJSON* val1 = cJSON_GetArrayItem(params, 0);
     cJSON* val2 = cJSON_GetArrayItem(params, 1);
-    printf("\n got params: %s ", cJSON_Print(params));
     int res = atoi(val1->valuestring) + atoi(val2->valuestring);
     return cJSON_CreateNumber(res);
 }

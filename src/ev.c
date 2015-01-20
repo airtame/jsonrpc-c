@@ -63,8 +63,10 @@ void ev_io_start(struct ev_loop *loop, ev_io *io) {
     loop_add_io(loop, io);
     pthread_mutex_unlock(&loop->mutex);
 
+#ifdef DEBUG
     ev_vb("Currently having %d io events in the loop: ", loop->no_fds);
     loop_display_ios(loop);
+#endif
 }
 
 void ev_io_stop(struct ev_loop *loop, ev_io *io) {
@@ -72,8 +74,10 @@ void ev_io_stop(struct ev_loop *loop, ev_io *io) {
     pthread_mutex_lock(&loop->mutex);
     loop_remove_io(loop, io);
     pthread_mutex_unlock(&loop->mutex);
+#ifdef DEBUG
     ev_vb("Currently having %d io events in the loop: ", loop->no_fds);
     loop_display_ios(loop);
+#endif
 }
 
 void ev_run(struct ev_loop *loop, int flags) {

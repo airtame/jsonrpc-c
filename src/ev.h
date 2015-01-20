@@ -17,9 +17,14 @@
 #include <stdio.h>
 #include <pthread.h>
 
+//#define DEBUG
 #define ev_error(...)    fprintf(stderr, "\n"__VA_ARGS__); fflush(stderr)
 #define ev_info(...)     fprintf(stdout, "\n"__VA_ARGS__); fflush(stdout)
+#ifdef DEBUG
 #define ev_vb(...)       fprintf(stdout, "\n"__VA_ARGS__); fflush(stdout)
+#else
+#define ev_vb(...)
+#endif
 
 enum {
     EV_OK = 0,
