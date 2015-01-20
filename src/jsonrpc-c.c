@@ -360,6 +360,15 @@ static int __jrpc_server_start(struct jrpc_server *server) {
 			exit(1);
 		}
 
+#ifndef _WIN32
+		// don't generate the SIGPIPE signal, but return EPIPE instead
+		if (setsockopt(sockfd, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof(int))
+				== -1) {
+			perror("setsockopt");
+			exit(1);
+		}
+#endif
+
 		if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
 			close(sockfd);
 			perror("server: bind");
