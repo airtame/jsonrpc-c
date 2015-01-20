@@ -22,16 +22,16 @@ int main(int argc, char *argv[]) {
     jrpc_client_init(&my_client);
     my_client.debug_level = 1;
 
-    if (argc < 2) {
-        printf("\n usage: %s number_1 number_2", argv[0]);
+    if (argc < 3) {
+        printf("\n usage: %s IP number_1 number_2", argv[0]);
         return 1;
     }
 
-    jrpc_client_connect(&my_client, "127.0.0.1", PORT);
+    jrpc_client_connect(&my_client, argv[1], PORT);
 
-    cJSON *result = jrpc_client_call(&my_client, "addTwoInts", 2, "3", "4");
-    printf("%s\n", cJSON_Print(result));
-    result = jrpc_client_call(&my_client, "addTwoInts", 2, argv[1], argv[2]);
-    printf("%s\n", cJSON_Print(result));
+    cJSON *result = jrpc_client_call(&my_client, "sayHello", 0);
+    printf("Hello result: %s\n", cJSON_Print(result));
+    result = jrpc_client_call(&my_client, "addTwoInts", 2, argv[2], argv[3]);
+    printf("Addition result: %s\n", cJSON_Print(result));
 	return 0;
 }

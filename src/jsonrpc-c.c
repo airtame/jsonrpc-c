@@ -485,10 +485,6 @@ int jrpc_deregister_procedure(struct jrpc_server *server, char *name) {
 
 // CLIENT related code
 int jrpc_client_init(struct jrpc_client *client) {
-    client->connection_watcher.buffer_size = 1500;
-    client->connection_watcher.buffer = malloc(1500);
-    memset(client->connection_watcher.buffer, 0, 1500);
-    client->connection_watcher.pos = 0;
     return -1;
 }
 
@@ -553,6 +549,7 @@ static cJSON* receive_reply(struct jrpc_client *client) {
 	struct jrpc_connection *conn =
 	        (struct jrpc_connection *) &client->connection_watcher;
 	size_t bytes_read = 0;
+	client->debug_level = 1;
 	int fd = conn->fd;
 	if (conn->pos == (conn->buffer_size - 1)) {
 		char * new_buffer = realloc(conn->buffer, conn->buffer_size *= 2);
@@ -582,6 +579,7 @@ static cJSON* receive_reply(struct jrpc_client *client) {
 	    cJSON *root;
 	    char *end_ptr = NULL;
 	    conn->pos += bytes_read;
+	    printf("\n elis: got reply: %s ", conn->buffer);
 
 	    if ((root = cJSON_Parse_Stream(conn->buffer, &end_ptr)) != NULL) {
 	        if (client->debug_level > 1) {
@@ -608,7 +606,12 @@ static cJSON* receive_reply(struct jrpc_client *client) {
 }
 
 cJSON* jrpc_client_call(struct jrpc_client *client, char *method_name, int no_args, ...) {
-    //    --> { "method": "addTwoInts", "params": ["1", "2"], "id": 1}
+    // reinit the buffers used to get the response
+    client->connection_watcher.buffer_size = 1500;
+    client->connection_watcher.buffer = malloc(1500);
+    memset(client->connection_watcher.buffer, 0, 1500);
+    client->connection_watcher.pos = 0;
+
     va_list argp;
     if (client == NULL || method_name == NULL) return NULL;
 
@@ -644,7 +647,9 @@ cJSON* jrpc_client_call(struct jrpc_client *client, char *method_name, int no_ar
     send(client->connection_watcher.fd, (void *) "\n", 1, 0);
 
     // TODO: make it robust and threading safe, using the ev.c
-    return receive_reply(client);
+    cJSON *reply= receive_reply(client);
+    free(client->connection_watcher.buffer);
+    return reply;
 
     call_error:
     printf("Error when trying to call the server");
