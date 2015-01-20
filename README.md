@@ -1,11 +1,11 @@
 jsonrpc-c
 =========
 
-JSON-RPC in C (server only for now)
+JSON-RPC in C (server and a basic version of client)
 
 What?
 -----
-A library for a C program to receive JSON-RPC requests on tcp sockets (no HTTP).
+A library for a C program to receive or make JSON-RPC requests on tcp sockets (no HTTP).
 
 Free software, MIT license.
 
@@ -31,6 +31,10 @@ Test the example server by running it and typing:
 or
 
 `echo "{\"method\":\"exit\"}" | nc localhost 1234`
+
+or
+`example/client 127.0.0.1 500  1 4`
+which will add 1 to 4 on the server 500 times.
 
 Who?
 ----
