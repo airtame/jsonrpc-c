@@ -498,6 +498,7 @@ int jrpc_client_init(struct jrpc_client *client) {
 }
 
 int jrpc_client_connect(struct jrpc_client *client, char *ip, int port) {
+    int yes = 1;
     struct sockaddr_in serv_addr;
     struct hostent *server;
 #ifdef _WIN32
@@ -520,6 +521,15 @@ int jrpc_client_connect(struct jrpc_client *client, char *ip, int port) {
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
     serv_addr.sin_addr.s_addr = inet_addr(ip);
+
+#ifndef _WIN32
+    // don't generate the SIGPIPE signal, but return EPIPE instead
+    if (setsockopt(client->connection_watcher.fd, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof(int))
+            == -1) {
+        perror("setsockopt");
+        exit(1);
+    }
+#endif
 
     if (connect(client->connection_watcher.fd, (const struct sockaddr *)(&(serv_addr)), sizeof(serv_addr)) < 0) {
         if (client->debug_level) {
