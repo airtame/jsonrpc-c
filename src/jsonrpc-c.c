@@ -605,6 +605,47 @@ static cJSON* receive_reply(struct jrpc_client *client) {
 	return NULL;
 }
 
+int jrpc_client_notification(struct jrpc_client *client, char *method_name, int no_args, ...) {
+    va_list argp;
+    if (client == NULL || method_name == NULL) return NULL;
+
+    cJSON *params = cJSON_CreateArray();
+    va_start(argp, no_args);
+    for (int i = 0; i < no_args; i++) {
+        char *argv = va_arg(argp, char *);
+        cJSON_AddItemToArray(params, cJSON_CreateString((const char*)argv));
+    }
+    va_end(argp);
+
+    cJSON *json_call = cJSON_CreateObject();
+    cJSON_AddItemToObject(json_call, "method", cJSON_CreateString(method_name));
+    cJSON_AddItemToObject(json_call, "params", params);
+
+    cJSON_AddItemToObject(json_call, "id", cJSON_CreateString("null"));
+
+    char *call_str = cJSON_Print(json_call);
+    if (client->debug_level) {
+        printf("calling remote with JSON: %s", call_str);
+    }
+
+    int to_send = strlen(call_str);
+    int sent = 0;
+    while (sent < to_send) {
+        sent = send(client->connection_watcher.fd, (void *) call_str, to_send, 0);
+        if (sent == -1) goto call_error;
+        to_send -= sent;
+    }
+    send(client->connection_watcher.fd, (void *) "\n", 1, 0);
+    free(call_str);
+
+    cJSON_Delete(json_call);
+    return 1;
+
+    call_error:
+    printf("Error when trying to call the server");
+    return -1;
+}
+
 cJSON* jrpc_client_call(struct jrpc_client *client, char *method_name, int no_args, ...) {
     // reinit the buffers used to get the response
     client->connection_watcher.buffer_size = 1500;
