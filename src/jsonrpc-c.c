@@ -5,6 +5,12 @@
  *      Author: hmng
  */
 
+/* Needed in order to enable addrinfo stuff from netdb.h */
+/* Source: http://stackoverflow.com/questions/7571870/netdb-h-not-linking-properly */
+#ifndef __POSIX
+#define _XOPEN_SOURCE 600
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -24,6 +30,13 @@
 #endif
 
 #include "jsonrpc-c.h"
+
+/* Ignore SIGPIPE on send()/recv() on linux */
+#ifdef __linux
+#define SOCKET_SENDRECV_FLAGS (MSG_NOSIGNAL)
+#else
+#define SOCKET_SENDRECV_FLAGS 0
+#endif
 
 #ifdef _WIN32
 #define close(socket) closesocket(socket)
@@ -94,8 +107,8 @@ static int send_response(struct jrpc_connection * conn, char *response) {
 	int fd = conn->fd;
 	if (conn->debug_level > 1)
 		printf("JSON Response:\n%s\n", response);
-	send(fd, response, strlen(response), 0);
-	send(fd, "\n", 1, 0);
+	send(fd, response, strlen(response), SOCKET_SENDRECV_FLAGS);
+	send(fd, "\n", 1, SOCKET_SENDRECV_FLAGS);
 	return 0;
 }
 
@@ -213,7 +226,7 @@ static void connection_cb(struct ev_loop *loop, ev_io *w, int revents) {
 	}
 	// can not fill the entire buffer, string must be NULL terminated
 	int max_read_size = conn->buffer_size - conn->pos - 1;
-	if ((bytes_read = recv(fd, conn->buffer + conn->pos, max_read_size, 0))
+	if ((bytes_read = recv(fd, conn->buffer + conn->pos, max_read_size, SOCKET_SENDRECV_FLAGS))
 			== -1) {
 		perror("read");
 		return close_connection(loop, w);
@@ -360,7 +373,7 @@ static int __jrpc_server_start(struct jrpc_server *server) {
 			exit(1);
 		}
 
-#ifndef _WIN32
+#ifdef __APPLE__
 		// don't generate the SIGPIPE signal, but return EPIPE instead
 		if (setsockopt(sockfd, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof(int))
 				== -1) {
@@ -522,7 +535,7 @@ int jrpc_client_connect(struct jrpc_client *client, char *ip, int port) {
     serv_addr.sin_port = htons(port);
     serv_addr.sin_addr.s_addr = inet_addr(ip);
 
-#ifndef _WIN32
+#ifdef __APPLE__
     // don't generate the SIGPIPE signal, but return EPIPE instead
     if (setsockopt(client->connection_watcher.fd, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof(int))
             == -1) {
@@ -578,7 +591,7 @@ static cJSON* receive_reply(struct jrpc_client *client) {
 	    }
 	    // can not fill the entire buffer, string must be NULL terminated
 	    int max_read_size = conn->buffer_size - conn->pos - 1;
-	    if ((bytes_read = recv(fd, conn->buffer + conn->pos, max_read_size, 0))
+	    if ((bytes_read = recv(fd, conn->buffer + conn->pos, max_read_size, SOCKET_SENDRECV_FLAGS))
 	            == -1) {
 	        perror("read");
 	        jrpc_client_disconnect(client);
@@ -641,11 +654,11 @@ int jrpc_client_notification(struct jrpc_client *client, char *method_name, int 
     int to_send = strlen(call_str);
     int sent = 0;
     while (sent < to_send) {
-        sent = send(client->connection_watcher.fd, (void *) call_str, to_send, 0);
+        sent = send(client->connection_watcher.fd, (void *) call_str, to_send, SOCKET_SENDRECV_FLAGS);
         if (sent == -1) goto call_error;
         to_send -= sent;
     }
-    send(client->connection_watcher.fd, (void *) "\n", 1, 0);
+    send(client->connection_watcher.fd, (void *) "\n", 1, SOCKET_SENDRECV_FLAGS);
     free(call_str);
 
     cJSON_Delete(json_call);
@@ -690,11 +703,11 @@ cJSON* jrpc_client_call(struct jrpc_client *client, char *method_name, int no_ar
     int to_send = strlen(call_str);
     int sent = 0;
     while (sent < to_send) {
-        sent = send(client->connection_watcher.fd, (void *) call_str, to_send, 0);
+        sent = send(client->connection_watcher.fd, (void *) call_str, to_send, SOCKET_SENDRECV_FLAGS);
         if (sent == -1) goto call_error;
         to_send -= sent;
     }
-    send(client->connection_watcher.fd, (void *) "\n", 1, 0);
+    send(client->connection_watcher.fd, (void *) "\n", 1, SOCKET_SENDRECV_FLAGS);
     free(call_str);
 
     cJSON_Delete(json_call);
