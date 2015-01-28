@@ -9,7 +9,7 @@
 #define JSONRPCC_H_
 
 #include "cJSON.h"
-#include <ev.h>
+#include "ev.h"
 
 /*
  *
