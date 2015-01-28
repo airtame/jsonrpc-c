@@ -13,6 +13,10 @@
 #include <windows.h>
 #else
 #include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <netdb.h>
 #endif
 #include <stdio.h>
 #include <pthread.h>
