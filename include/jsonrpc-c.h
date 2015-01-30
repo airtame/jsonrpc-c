@@ -8,8 +8,8 @@
 #ifndef JSONRPCC_H_
 #define JSONRPCC_H_
 
-#include "cJSON.h"
-#include "ev.h"
+#include <cJSON.h>
+#include <ev.h>
 
 /*
  *
