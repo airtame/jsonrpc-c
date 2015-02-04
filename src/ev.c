@@ -13,6 +13,7 @@
 #else
 #include <winsock2.h>
 #endif
+#include <errno.h>
 
 // PRIVATE DECLARATIONS
 enum {
@@ -110,6 +111,7 @@ void ev_run(struct ev_loop *loop, int flags) {
         int rc= select(FD_SETSIZE, &loop->readfds, NULL, NULL, NULL);
         if (rc == 0) continue;
         if (rc < 0) {
+            if (errno == EINTR) continue;
             ev_error("Error when doing select on our sockets");
             perror("select");
             return;
