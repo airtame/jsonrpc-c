@@ -241,6 +241,7 @@ static void connection_cb(struct ev_loop *loop, ev_io *w, int revents) {
 		char *end_ptr = NULL;
 		conn->pos += bytes_read;
 
+		parse_the_rest:
 		if ((root = cJSON_Parse_Stream(conn->buffer, &end_ptr)) != NULL) {
 			if (server->debug_level > 1) {
 				char * str_result = cJSON_Print(root);
@@ -252,13 +253,14 @@ static void connection_cb(struct ev_loop *loop, ev_io *w, int revents) {
 				eval_request(server, conn, root);
 			}
 			//shift processed request, discarding it
+			conn->pos = strlen(end_ptr);
 			memmove(conn->buffer, end_ptr, strlen(end_ptr) + 2);
 
-			conn->pos = strlen(end_ptr);
 			memset(conn->buffer + conn->pos, 0,
 					conn->buffer_size - conn->pos - 1);
 
 			cJSON_Delete(root);
+			goto parse_the_rest;
 		} else {
 			// did we parse the all buffer? If so, just wait for more.
 			// else there was an error before the buffer's end
