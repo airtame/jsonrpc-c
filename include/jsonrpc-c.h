@@ -45,15 +45,6 @@ struct jrpc_procedure {
 	void *data;
 };
 
-struct jrpc_server {
-	int port_number;
-	struct ev_loop *loop;
-	ev_io listen_watcher;
-	int procedure_count;
-	struct jrpc_procedure *procedures;
-	int debug_level;
-};
-
 struct jrpc_connection {
 	struct ev_io io;
 	int fd;
@@ -63,43 +54,51 @@ struct jrpc_connection {
 	int debug_level;
 };
 
-struct jrpc_client {
-    char *ip;
-    int port_number;
-    struct ev_loop *loop;
-    struct jrpc_connection connection_watcher;
-    int debug_level;
+typedef void (*jrpc_callback)(struct jrpc_object *object);
+
+struct jrpc_object {
+	char is_server;
+	char *ip;
+	int port_number;
+	struct ev_loop *loop;
+	ev_io listen_watcher;
+	int procedure_count;
+	struct jrpc_procedure *procedures;
+	struct jrpc_connection connection_watcher;
+	int debug_level;
+	jrpc_callback connection_callback;
 };
 
 typedef void (rpc_reply_callback_t)(int call_id, cJSON *reply);
 
 /*  JRCP CLIENT APIs */
-int jrpc_client_init(struct jrpc_client *client);
-int jrpc_client_connect(struct jrpc_client *client, char *ip, int port_number);
-int jrpc_client_disconnect(struct jrpc_client *client);
-int jrpc_client_notification(struct jrpc_client *client, char *method_name, int no_args, ...);
-cJSON* jrpc_client_call(struct jrpc_client *client, char *method_name, int no_args, ...);
-int jrpc_client_async_call(struct jrpc_client *client, char *method_name, rpc_reply_callback_t *reply_cb, ...);
-int jrpc_client_destroy(struct jrpc_client *client);
+int jrpc_client_init(struct jrpc_object *client);
+int jrpc_client_connect(struct jrpc_object *client, char *ip, int port_number);
+int jrpc_client_disconnect(struct jrpc_object *client);
+int jrpc_client_notification(struct jrpc_object *client, char *method_name, int no_args, ...);
+cJSON* jrpc_client_call(struct jrpc_object *client, char *method_name, int no_args, ...);
+int jrpc_client_async_call(struct jrpc_object *client, char *method_name, rpc_reply_callback_t *reply_cb, ...);
+int jrpc_client_destroy(struct jrpc_object *client);
+void jrpc_client_run(struct jrpc_object *client);
 
-int jrpc_server_init(struct jrpc_server *server, int port_number);
+int jrpc_server_init(struct jrpc_object *server, int port_number);
 
-int jrpc_server_init_with_ev_loop(struct jrpc_server *server,
+int jrpc_server_init_with_ev_loop(struct jrpc_object *server,
         int port_number, struct ev_loop *loop);
 
-static int __jrpc_server_start(struct jrpc_server *server);
+static int __jrpc_server_start(struct jrpc_object *server);
 
-void jrpc_server_run(struct jrpc_server *server);
+void jrpc_server_run(struct jrpc_object *server);
 
-int jrpc_server_stop(struct jrpc_server *server);
+int jrpc_server_stop(struct jrpc_object *server);
 
-void jrpc_server_destroy(struct jrpc_server *server);
+void jrpc_server_destroy(struct jrpc_object *server);
 
 static void jrpc_procedure_destroy(struct jrpc_procedure *procedure);
 
-int jrpc_register_procedure(struct jrpc_server *server,
+int jrpc_register_procedure(struct jrpc_object *server,
 		jrpc_function function_pointer, char *name, void *data);
 
-int jrpc_deregister_procedure(struct jrpc_server *server, char *name);
+int jrpc_deregister_procedure(struct jrpc_object *server, char *name);
 
 #endif
