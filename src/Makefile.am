@@ -11,7 +11,7 @@ lib_LTLIBRARIES = libjsonrpcc.la
 libjsonrpcc_la_SOURCES = cJSON.c jsonrpc-c.c ev.c
 
 # Linker options libTestProgram
-libjsonrpcc_la_LDFLAGS = -lm
+libjsonrpcc_la_LDFLAGS = -lm -no-undefined
 
 # Compiler options. Here we are adding the include directory
 # to be searched for headers included in the source code.
@@ -20,3 +20,6 @@ libjsonrpcc_la_CPPFLAGS = $(LIBEV_CFLAGS) -I$(top_srcdir)/include -std=c99
 # libev
 libjsonrpcc_la_LIBADD = $(LIBEV_LIBS)
 
+if MINGW32
+    libjsonrpcc_la_LIBADD += -lws2_32
+endif
