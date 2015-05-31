@@ -31,6 +31,8 @@ typedef struct list {
 #define LIST_ITERATE(list) (list_t *el = LIST(list); el != NULL; el = el->next)
 #define LIST_ITERATOR() (el)
 
+#define SELECT_TIMEOUT_SEC (1)
+
 static list_t first_el = {
         .next = NULL,
         .io = NULL
@@ -84,6 +86,9 @@ void ev_io_stop(struct ev_loop *loop, ev_io *io) {
 void ev_run(struct ev_loop *loop, int flags) {
     ev_vb("Starting the loop");
     ev_io** cbs;
+    struct timeval tv;
+    tv.tv_sec = SELECT_TIMEOUT_SEC;
+    tv.tv_usec = 0;
 
     pthread_mutex_init(&loop->mutex, NULL);
     loop->running = 1;
@@ -108,7 +113,7 @@ void ev_run(struct ev_loop *loop, int flags) {
         pthread_mutex_unlock(&loop->mutex);
 
         // wait for one or more socket being ready
-        int rc= select(FD_SETSIZE, &loop->readfds, NULL, NULL, NULL);
+        int rc= select(FD_SETSIZE, &loop->readfds, NULL, NULL, &tv);
         if (rc == 0) continue;
         if (rc < 0) {
             if (errno == EINTR) continue;
