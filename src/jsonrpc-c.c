@@ -45,6 +45,9 @@
 static int _call_id = 0;
 struct ev_loop *loop;
 
+static int __jrpc_server_start(struct jrpc_server *server);
+static void jrpc_procedure_destroy(struct jrpc_procedure *procedure);
+
 #ifdef _WIN32
 /* Hack to get inet_ntop to work on Windows */
 #ifndef inet_ntop
