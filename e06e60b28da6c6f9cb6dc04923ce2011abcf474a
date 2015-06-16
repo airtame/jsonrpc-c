@@ -1,0 +1,8 @@
+Code-Review+2: Attila Sukosd <attila@airtame.com>
+Code-Review+1: Andrew Keating <keating@airtame.com>
+Verified+1: Vasile Popescu <vasile@airtame.com>
+Submitted-by: Vasile Popescu <vasile@airtame.com>
+Submitted-at: Tue, 16 Jun 2015 14:45:20 +0200
+Reviewed-on: https://gerrit.airtame.com:8443/2505
+Project: dongle/jsonrpc-c
+Branch: refs/heads/master
