@@ -54,4 +54,5 @@ stamp-h1
 *.lo
 *.libs
 example/server
+example/client
 
